@@ -1,52 +1,425 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="uk">
 <head>
-    <meta charset="UTF-8">
-    <title>Натисни, щоб почати музику!</title>
-    <style>
-        body {
-            display: flex;
-            justify-content: center; /* Центрує по горизонталі */
-            align-items: center;     /* Центрує по вертикалі */
-            height: 100vh;          /* Висота на весь екран */
-            margin: 0;
-            background: black;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON Folder Processor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap');
 
-        button {
-            padding: 60px 120px;
-            font-size: 72px;
-            color: white;
-            background: red;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-        }
-    </style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #161616;
+    --border: #2a2a2a;
+    --text: #e8e8e8;
+    --muted: #666;
+    --green: #4ade80;
+    --red: #f87171;
+    --blue: #60a5fa;
+    --yellow: #fbbf24;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 2.5rem 1rem;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 680px;
+  }
+
+  .header {
+    margin-bottom: 2rem;
+  }
+
+  .header h1 {
+    font-size: 22px;
+    font-weight: 500;
+    font-family: var(--mono);
+    letter-spacing: -0.5px;
+    margin-bottom: 6px;
+  }
+
+  .header p {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  .header code {
+    color: var(--blue);
+    background: #1a2030;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 1.5rem;
+  }
+
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 12px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+
+  .stat-value {
+    font-size: 26px;
+    font-weight: 500;
+    font-family: var(--mono);
+  }
+
+  .buttons {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+  }
+
+  button {
+    padding: 9px 20px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  button:hover:not(:disabled) { border-color: #555; background: #1e1e1e; }
+  button:active:not(:disabled) { transform: scale(0.98); }
+  button:disabled { opacity: 0.3; cursor: default; }
+
+  #btn-download { border-color: var(--green); color: var(--green); }
+  #btn-download:hover:not(:disabled) { background: #0a2010; border-color: #6ee7a0; }
+
+  .progress-wrap {
+    display: none;
+    margin-bottom: 1.25rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+
+  .progress-track {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+
+  .progress-bar {
+    height: 100%;
+    width: 0%;
+    background: var(--blue);
+    transition: width 0.15s;
+  }
+
+  .progress-label {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: var(--mono);
+  }
+
+  #log {
+    display: none;
+    font-size: 12.5px;
+    font-family: var(--mono);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px;
+    max-height: 280px;
+    overflow-y: auto;
+    line-height: 1.7;
+    scrollbar-width: thin;
+    scrollbar-color: #333 transparent;
+  }
+
+  #log::-webkit-scrollbar { width: 5px; }
+  #log::-webkit-scrollbar-track { background: transparent; }
+  #log::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+
+  .err  { color: var(--red); }
+  .ok   { color: var(--green); }
+  .info { color: var(--muted); }
+  .warn { color: var(--yellow); }
+</style>
 </head>
 <body>
-    <button id="playButton">Натисни мене!</button>
+<div class="card">
+  <div class="header">
+    <h1>JSON Folder Processor</h1>
+    <p>
+      Оберіть папку з <code>.json</code>-файлами.
+      Скрипт автоматично визначить потрібні ключі та збере <code>result.json</code>.
+    </p>
+  </div>
 
-    <script>
-        const button = document.getElementById('playButton');
-        const audio = new Audio('https://files.catbox.moe/zqw1sx.ogg');
-        audio.loop = true; // Безперервне відтворення
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">Файлів</div>
+      <div class="stat-value" id="stat-total">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Оброблено</div>
+      <div class="stat-value" id="stat-done">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Помилок</div>
+      <div class="stat-value" id="stat-err">—</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Об'єктів</div>
+      <div class="stat-value" id="stat-results">—</div>
+    </div>
+  </div>
 
-        // Завантажуємо аудіо заздалегідь
-        window.addEventListener('load', () => {
-            audio.play().catch(() => {
-                console.log('Очікуємо взаємодію користувача...');
-            });
-        });
+  <div class="buttons">
+    <button id="btn-pick" onclick="pickFolder()">📂 Обрати папку</button>
+    <button id="btn-download" onclick="downloadResult()" disabled>⬇ Завантажити result.json</button>
+  </div>
 
-        button.addEventListener('click', () => {
-            audio.play().then(() => {
-                console.log('Музика грає!');
-                button.remove(); // Видаляє кнопку після натискання
-            }).catch(err => {
-                console.error('Помилка відтворення:', err);
-            });
-        }, { once: true }); // Працює лише один раз
-    </script>
+  <div class="progress-wrap" id="progress-wrap">
+    <div class="progress-track">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <div class="progress-label" id="progress-label"></div>
+  </div>
+
+  <div id="log"></div>
+</div>
+
+<script>
+let resultData = null;
+
+function log(msg, type) {
+  const el = document.getElementById('log');
+  el.style.display = 'block';
+  const cls = type ? ` class="${type}"` : '';
+  el.innerHTML += `<span${cls}>${escHtml(msg)}</span><br>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Відкидаємо цифри після 2-ї позиції після крапки (без округлення)
+function truncate2(num) {
+  const s = Math.abs(num).toString();
+  const dot = s.indexOf('.');
+  let trunc;
+  if (dot === -1) trunc = s + '.00';
+  else {
+    const after = s.slice(dot + 1);
+    if (after.length >= 2) trunc = s.slice(0, dot + 3);
+    else trunc = s + (after.length === 0 ? '00' : '0');
+  }
+  return num < 0 ? '-' + trunc : trunc;
+}
+
+/**
+ * Перевіряє чи є значення "масивом пар" —
+ * масив масивів, де кожен підмасив має рівно 2 елементи,
+ * а обидва елементи конвертуються у скінченне число.
+ */
+function isArrayOfPairs(val) {
+  if (!Array.isArray(val) || val.length === 0) return false;
+  return val.every(item =>
+    Array.isArray(item) &&
+    item.length === 2 &&
+    isFinite(parseFloat(item[0])) &&
+    isFinite(parseFloat(item[1]))
+  );
+}
+
+/**
+ * Знаходить у об'єкті рівно два ключі, значення яких — масиви пар.
+ * Повертає [key2name, key3name] або кидає помилку.
+ */
+function detectPairKeys(data) {
+  const pairKeys = Object.keys(data).filter(k => isArrayOfPairs(data[k]));
+  if (pairKeys.length < 2) {
+    throw new Error(
+      `Знайдено ${pairKeys.length} масив(ів) пар — потрібно мінімум 2` +
+      (pairKeys.length === 1 ? ` (знайдено: "${pairKeys[0]}")` : '')
+    );
+  }
+  // Беремо перші два (за порядком ключів у файлі)
+  return [pairKeys[0], pairKeys[1]];
+}
+
+async function pickFolder() {
+  if (!window.showDirectoryPicker) {
+    alert('Ваш браузер не підтримує File System Access API.\nПотрібен Chrome 86+ або Edge 86+.');
+    return;
+  }
+
+  let dirHandle;
+  try {
+    dirHandle = await window.showDirectoryPicker();
+  } catch(e) {
+    log('Скасовано або помилка доступу до папки.', 'info');
+    return;
+  }
+
+  const btnDl = document.getElementById('btn-download');
+  btnDl.disabled = true;
+  document.getElementById('progress-wrap').style.display = 'block';
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('log').style.display = 'none';
+  document.getElementById('btn-pick').disabled = true;
+  resultData = null;
+
+  const files = [];
+  for await (const entry of dirHandle.values()) {
+    if (
+      entry.kind === 'file' &&
+      entry.name.toLowerCase().endsWith('.json') &&
+      entry.name.toLowerCase() !== 'result.json'
+    ) {
+      files.push(entry);
+    }
+  }
+
+  document.getElementById('stat-total').textContent = files.length;
+  document.getElementById('stat-done').textContent = '0';
+  document.getElementById('stat-err').textContent = '0';
+  document.getElementById('stat-results').textContent = '0';
+
+  if (files.length === 0) {
+    log('Папка не містить .json-файлів.', 'info');
+    document.getElementById('progress-wrap').style.display = 'none';
+    document.getElementById('btn-pick').disabled = false;
+    return;
+  }
+
+  const results = [];
+  let done = 0, errors = 0;
+
+  for (const entry of files) {
+    const filename = entry.name;
+    const baseName = filename.replace(/\.json$/i, '');
+
+    try {
+      const file = await entry.getFile();
+      const text = await file.text();
+      const data = JSON.parse(text);
+
+      // Автоматично знаходимо два ключі-масиви пар
+      const [k2, k3] = detectPairKeys(data);
+
+      const mapItems = (arr) => arr.map(pair => {
+        const a = parseFloat(pair[0]);
+        const b = parseFloat(pair[1]);
+        return { keyA: String(pair[0]), keyB: String(pair[1]), keyC: a * b, keyD: null };
+      });
+
+      const key2Items = mapItems(data[k2]);
+      const key3Items = mapItems(data[k3]);
+
+      const key5 = key2Items.reduce((s, x) => s + x.keyC, 0);
+      const key6 = key3Items.reduce((s, x) => s + x.keyC, 0);
+
+      let key7 = null, key8 = null;
+      if (key5 >= key6 && key6 !== 0) {
+        key7 = truncate2(key5 / key6);
+        key8 = key5 - key6;
+      }
+
+      results.push({
+        [k2]: key2Items,
+        [k3]: key3Items,
+        key5,
+        key6,
+        key7,
+        key8,
+        key9: baseName,
+        key10: null,
+        key11: null,
+        key12: null
+      });
+
+      done++;
+      log(`✓ ${filename}  [${k2} / ${k3}]`, 'ok');
+
+    } catch(e) {
+      errors++;
+      log(`✗ ${filename} — ${e.message}`, 'err');
+    }
+
+    document.getElementById('stat-done').textContent = done;
+    document.getElementById('stat-err').textContent = errors;
+    document.getElementById('stat-results').textContent = results.length;
+    const pct = Math.round(((done + errors) / files.length) * 100);
+    document.getElementById('progress-bar').style.width = pct + '%';
+    document.getElementById('progress-label').textContent =
+      `${done + errors} / ${files.length}  (${pct}%)`;
+  }
+
+  // Сортуємо: key7=null — в кінець, інші — спадання
+  results.sort((a, b) => {
+    const av = a.key7 === null ? -Infinity : parseFloat(a.key7);
+    const bv = b.key7 === null ? -Infinity : parseFloat(b.key7);
+    return bv - av;
+  });
+
+  resultData = results;
+  document.getElementById('stat-results').textContent = results.length;
+  btnDl.disabled = false;
+  document.getElementById('btn-pick').disabled = false;
+  document.getElementById('progress-label').textContent =
+    `✅ Готово! ${results.length} об'єктів зібрано.`;
+  log(`--- Готово. Натисніть «Завантажити result.json» ---`, 'info');
+}
+
+function downloadResult() {
+  if (!resultData) return;
+  const json = JSON.stringify(resultData, null, 5);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'result.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+</script>
 </body>
 </html>
