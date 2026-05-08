@@ -123,6 +123,9 @@
 
   #btn-download { border-color: var(--green); color: var(--green); }
   #btn-download:hover:not(:disabled) { background: #0a2010; border-color: #6ee7a0; }
+  #btn-errors { border-color: var(--red); color: var(--red); }
+  #btn-errors:hover:not(:disabled) { background: #200a0a; border-color: #fca5a5; }
+  #btn-clear:hover:not(:disabled) { border-color: #777; }
 
   .progress-wrap {
     display: none;
@@ -211,6 +214,8 @@
   <div class="buttons">
     <button id="btn-pick" onclick="pickFolder()">📂 Обрати папку</button>
     <button id="btn-download" onclick="downloadResult()" disabled>⬇ Завантажити result.json</button>
+    <button id="btn-errors" onclick="downloadErrors()" disabled>⚠ Скачати помилки</button>
+    <button id="btn-clear" onclick="clearAll()">✕ Очистити</button>
   </div>
 
   <div class="progress-wrap" id="progress-wrap">
@@ -225,17 +230,20 @@
 
 <script>
 let resultData = null;
-
-function log(msg, type) {
-  const el = document.getElementById('log');
-  el.style.display = 'block';
-  const cls = type ? ` class="${type}"` : '';
-  el.innerHTML += `<span${cls}>${escHtml(msg)}</span><br>`;
-  el.scrollTop = el.scrollHeight;
-}
+let errorLog = [];
 
 function escHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function renderLog() {
+  const el = document.getElementById('log');
+  if (errorLog.length === 0) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.innerHTML = errorLog.map(e =>
+    `<span class="err">✗ ${escHtml(e.filename)} — ${escHtml(e.msg)}</span><br>`
+  ).join('') + `<span class="info">--- ${errorLog.length} помилок ---</span>`;
+  el.scrollTop = 0;
 }
 
 // Відкидаємо цифри після 2-ї позиції після крапки (без округлення)
@@ -293,17 +301,19 @@ async function pickFolder() {
   try {
     dirHandle = await window.showDirectoryPicker();
   } catch(e) {
-    log('Скасовано або помилка доступу до папки.', 'info');
+    errorLog.push({ filename: '—', msg: 'Скасовано або помилка доступу до папки' });
     return;
   }
 
   const btnDl = document.getElementById('btn-download');
   btnDl.disabled = true;
+  document.getElementById('btn-errors').disabled = true;
   document.getElementById('progress-wrap').style.display = 'block';
   document.getElementById('log').innerHTML = '';
   document.getElementById('log').style.display = 'none';
   document.getElementById('btn-pick').disabled = true;
   resultData = null;
+  errorLog = [];
 
   const files = [];
   for await (const entry of dirHandle.values()) {
@@ -322,7 +332,8 @@ async function pickFolder() {
   document.getElementById('stat-results').textContent = '0';
 
   if (files.length === 0) {
-    log('Папка не містить .json-файлів.', 'info');
+    errorLog.push({ filename: '—', msg: 'Папка не містить .json-файлів' });
+    renderLog();
     document.getElementById('progress-wrap').style.display = 'none';
     document.getElementById('btn-pick').disabled = false;
     return;
@@ -330,58 +341,40 @@ async function pickFolder() {
 
   const results = [];
   let done = 0, errors = 0;
+  const BATCH = 32;
 
-  for (const entry of files) {
+  function processEntry(entry) {
     const filename = entry.name;
     const baseName = filename.replace(/\.json$/i, '');
+    return entry.getFile()
+      .then(f => f.text())
+      .then(text => {
+        const data = JSON.parse(text);
+        const [k2, k3] = detectPairKeys(data);
 
-    try {
-      const file = await entry.getFile();
-      const text = await file.text();
-      const data = JSON.parse(text);
+        const mapItems = (arr) => arr.map(pair => {
+          const a = parseFloat(pair[0]);
+          const b = parseFloat(pair[1]);
+          return { keyA: String(pair[0]), keyB: String(pair[1]), keyC: a * b, keyD: null };
+        });
 
-      // Автоматично знаходимо два ключі-масиви пар
-      const [k2, k3] = detectPairKeys(data);
+        const key2Items = mapItems(data[k2]);
+        const key3Items = mapItems(data[k3]);
+        const key5 = key2Items.reduce((s, x) => s + x.keyC, 0);
+        const key6 = key3Items.reduce((s, x) => s + x.keyC, 0);
 
-      const mapItems = (arr) => arr.map(pair => {
-        const a = parseFloat(pair[0]);
-        const b = parseFloat(pair[1]);
-        return { keyA: String(pair[0]), keyB: String(pair[1]), keyC: a * b, keyD: null };
-      });
+        let key7 = null, key8 = null;
+        if (key5 >= key6 && key6 !== 0) {
+          key7 = truncate2(key5 / key6);
+          key8 = key5 - key6;
+        }
 
-      const key2Items = mapItems(data[k2]);
-      const key3Items = mapItems(data[k3]);
+        return { ok: true, filename, obj: { [k2]: key2Items, [k3]: key3Items, key5, key6, key7, key8, key9: baseName, key10: null, key11: null, key12: null }, k2, k3 };
+      })
+      .catch(e => ({ ok: false, filename, msg: e.message }));
+  }
 
-      const key5 = key2Items.reduce((s, x) => s + x.keyC, 0);
-      const key6 = key3Items.reduce((s, x) => s + x.keyC, 0);
-
-      let key7 = null, key8 = null;
-      if (key5 >= key6 && key6 !== 0) {
-        key7 = truncate2(key5 / key6);
-        key8 = key5 - key6;
-      }
-
-      results.push({
-        [k2]: key2Items,
-        [k3]: key3Items,
-        key5,
-        key6,
-        key7,
-        key8,
-        key9: baseName,
-        key10: null,
-        key11: null,
-        key12: null
-      });
-
-      done++;
-      log(`✓ ${filename}  [${k2} / ${k3}]`, 'ok');
-
-    } catch(e) {
-      errors++;
-      log(`✗ ${filename} — ${e.message}`, 'err');
-    }
-
+  function updateUI() {
     document.getElementById('stat-done').textContent = done;
     document.getElementById('stat-err').textContent = errors;
     document.getElementById('stat-results').textContent = results.length;
@@ -389,6 +382,24 @@ async function pickFolder() {
     document.getElementById('progress-bar').style.width = pct + '%';
     document.getElementById('progress-label').textContent =
       `${done + errors} / ${files.length}  (${pct}%)`;
+  }
+
+  for (let i = 0; i < files.length; i += BATCH) {
+    const batch = files.slice(i, i + BATCH);
+    const batchResults = await Promise.all(batch.map(processEntry));
+
+    for (const r of batchResults) {
+      if (r.ok) {
+        results.push(r.obj);
+        done++;
+      } else {
+        errors++;
+        errorLog.push({ filename: r.filename, msg: r.msg });
+      }
+    }
+    updateUI();
+    // Даємо браузеру "подихати" між батчами щоб UI не фризив
+    await new Promise(r => setTimeout(r, 0));
   }
 
   // Сортуємо: key7=null — в кінець, інші — спадання
@@ -404,7 +415,39 @@ async function pickFolder() {
   document.getElementById('btn-pick').disabled = false;
   document.getElementById('progress-label').textContent =
     `✅ Готово! ${results.length} об'єктів зібрано.`;
-  log(`--- Готово. Натисніть «Завантажити result.json» ---`, 'info');
+  if (errorLog.length > 0) {
+    document.getElementById('btn-errors').disabled = false;
+    renderLog();
+  }
+}
+
+function clearAll() {
+  resultData = null;
+  errorLog = [];
+  document.getElementById('stat-total').textContent = '—';
+  document.getElementById('stat-done').textContent = '—';
+  document.getElementById('stat-err').textContent = '—';
+  document.getElementById('stat-results').textContent = '—';
+  document.getElementById('progress-wrap').style.display = 'none';
+  document.getElementById('progress-bar').style.width = '0%';
+  document.getElementById('progress-label').textContent = '';
+  document.getElementById('log').innerHTML = '';
+  document.getElementById('log').style.display = 'none';
+  document.getElementById('btn-download').disabled = true;
+  document.getElementById('btn-errors').disabled = true;
+}
+
+function downloadErrors() {
+  if (!errorLog.length) return;
+  const lines = errorLog.map(e => `${e.filename}\t${e.msg}`).join('\n');
+  const content = `Файл\tПомилка\n` + lines;
+  const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'errors.txt';
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function downloadResult() {
